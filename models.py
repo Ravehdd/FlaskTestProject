@@ -13,12 +13,12 @@ from passlib.hash import bcrypt
 Base = declarative_base()
 
 
-# class Name(Base):
-#     __tablename__ = "names"
-#     id = Column(Integer, primary_key=True)
-#     name = Column(String)
-#     age = Column(Integer)
-#     user_id = Column(Integer, ForeignKey("user.id"))
+class Name(Base):
+    __tablename__ = "names"
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    age = Column(Integer)
+    user_id = Column(Integer, ForeignKey("user.id"))
 
 
 class Video(Base):
@@ -35,7 +35,7 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, nullable=False, unique=True)
     password = Column(String, nullable=False)
-    names = relationship("Name", backref="user", lazy=True)
+    names = relationship("Video", backref="user", lazy=True)
 
     def __init__(self, **kwargs):
         self.name = kwargs.get("name")

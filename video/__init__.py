@@ -5,11 +5,11 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.ext.declarative import declarative_base
 from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity
-from config import Config
+from .config import Config
 from apispec.ext.marshmallow import MarshmallowPlugin
 from apispec import APISpec
 from flask_apispec.extension import FlaskApiSpec
-from schemas import *
+from .schemas import *
 from flask_apispec import use_kwargs, marshal_with
 import logging
 
@@ -23,8 +23,20 @@ client = app.test_client()
 jwt = JWTManager(app)
 app.config.from_object(Config)
 
-from models import Base, User, Video
+from .models import User, Video, Base
 Base.query = session.query_property()
+
+docs = FlaskApiSpec()
+docs.init_app(app)
+app.config.update({
+    "APISPEC_SPEC": APISpec(
+        title="Spec",
+        version="v1",
+        openapi_version="2.0",
+        plugins=[MarshmallowPlugin()]
+    ),
+    "APISPEC_SWAGGER_URL": "/swagger"
+})
 
 Base.metadata.create_all(bind=engine)
 
@@ -43,17 +55,6 @@ def setup_logger():
 
 logger = setup_logger()
 
-docs = FlaskApiSpec()
-docs.init_app(app)
-app.config.update({
-    "APISPEC_SPEC": APISpec(
-        title="Spec",
-        version="v1",
-        openapi_version="2.0",
-        plugins=[MarshmallowPlugin()]
-    ),
-    "APISPEC_SWAGGER_URL": "/swagger"
-})
 
 
 # @app.route("/register", methods=["POST"])
@@ -109,7 +110,7 @@ def login():
 def get_index():
     try:
         user_id = get_jwt_identity()
-        videos = Video.query.filter(Video.user_id == user_id).all()
+        videos = Video.get_user_list(user_id=user_id)
     except Exception as e:
         logger.warning(f"user:{user_id} read action failed with errors: {e}")
         return {"message": str(e)}, 400
@@ -124,9 +125,8 @@ def post_index(**kwargs):
     params = request.json
     try:
         user_id = get_jwt_identity()
-        new_one = Video(user_id=user_id, **params)
-        session.add(new_one)
-        session.commit()
+        new_one = Video(user_id=user_id, **kwargs)
+        new_one.save()
     except Exception as e:
         logger.warning(f"user:{user_id} create action failed with errors: {e}")
         return {"message": str(e)}, 400
@@ -140,12 +140,8 @@ def post_index(**kwargs):
 def put_index(video_id, **kwargs):
     try:
         user_id = get_jwt_identity()
-        item = Video.query.filter(Video.id == video_id, Video.user_id == user_id).first()
-        if not item:
-            return {"response": "No videos with this id"}
-        for key, value in kwargs.items():
-            setattr(item, key, value)
-        session.commit()
+        item = Video.get(video_id=video_id, user_id=user_id)
+        item.update(**kwargs)
     except Exception as e:
         logger.warning(f"user:{user_id} update action failed with errors: {e}")
         return {"message": str(e)}, 400
@@ -158,17 +154,12 @@ def put_index(video_id, **kwargs):
 def delete_index(video_id):
     try:
         user_id = get_jwt_identity()
-        item = Video.query.filter(Video.id == video_id, Video.user_id == user_id).first()
-        if not item:
-            return {"response": "No videos with this id"}
-        session.delete(item)
-        session.commit()
+        item = Video.get(video_id=video_id, user_id=user_id)
+        item.delete()
     except Exception as e:
         logger.warning(f"user:{user_id} delete action failed with errors: {e}")
         return {"message": str(e)}, 400
     return {"response": "Deleted successfully"}
-
-
 
 
 @app.teardown_appcontext
@@ -191,6 +182,3 @@ def error_handler(err):
 docs.register(get_index)
 docs.register(post_index)
 
-
-if __name__ == "__main__":
-    app.run(debug=True, port=8000)
